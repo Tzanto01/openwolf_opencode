@@ -165,5 +165,14 @@ export function createProgram(): Command {
       bugSearch(term);
     });
 
+  // --- Migrate command ---
+  program
+    .command("migrate")
+    .description("Migrate an existing openwolf (Claude Code) project to openwolf-opencode (OpenCode native)")
+    .action(async () => {
+      const { migrateCommand } = await import("./migrate-cmd.js");
+      await migrateCommand();
+    });
+
   return program;
 }
