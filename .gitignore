@@ -42,3 +42,11 @@ reframe/
 openwolf-icon.zip
 openwolf-blueprint.md
 openwolf-readme-prompt.md
+
+# OpenWolf — runtime & generated files (do not commit)
+.wolf/daemon.log
+.wolf/cron-state.json
+.wolf/designqc-report.json
+.wolf/suggestions.json
+.wolf/backups/
+.wolf/hooks/

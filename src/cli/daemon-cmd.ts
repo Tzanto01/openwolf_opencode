@@ -86,14 +86,10 @@ export function daemonStart(): void {
   const daemonScript = path.resolve(__dirname, "..", "daemon", "wolf-daemon.js");
 
   try {
-    execFileSync("pm2", [
-      "start", daemonScript,
-      "--name", name,
-      "--cwd", projectRoot,
-    ], {
-      stdio: "inherit",
-      env: { ...process.env, OPENWOLF_PROJECT_ROOT: projectRoot },
-    });
+    execSync(
+      `pm2 start "${daemonScript}" --name "${name}" --cwd "${projectRoot}"`,
+      { stdio: "inherit", env: { ...process.env, OPENWOLF_PROJECT_ROOT: projectRoot } }
+    );
     execSync("pm2 save", { stdio: "ignore" });
     console.log(`\n  ✓ Daemon started: ${name}`);
     if (isWindows()) {

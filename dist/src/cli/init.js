@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
-import { execSync, execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { findProjectRoot } from "../scanner/project-root.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
 import { readJSON, writeJSON, readText, writeText, appendText } from "../utils/fs-safe.js";
@@ -216,14 +216,7 @@ export async function initCommand() {
         // Resolve daemon script relative to openwolf's install dir, not the target project
         const daemonScript = path.resolve(__dirname, "..", "daemon", "wolf-daemon.js");
         try {
-            execFileSync("pm2", [
-                "start", daemonScript,
-                "--name", name,
-                "--cwd", projectRoot,
-            ], {
-                stdio: "ignore",
-                env: { ...process.env, OPENWOLF_PROJECT_ROOT: projectRoot },
-            });
+            execSync(`pm2 start "${daemonScript}" --name "${name}" --cwd "${projectRoot}"`, { stdio: "ignore", env: { ...process.env, OPENWOLF_PROJECT_ROOT: projectRoot } });
             execSync("pm2 save", { stdio: "ignore" });
             daemonStatus = "running via pm2";
         }
