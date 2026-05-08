@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
+# Build output (dist/ is committed — required for npm install from GitHub)
+# dist/
 
 # Environment
 .env
