@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { findProjectRoot } from "../scanner/project-root.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
-import { readJSON, writeJSON, readText, writeText } from "../utils/fs-safe.js";
+import { readJSON, writeJSON, readText, writeText, appendText } from "../utils/fs-safe.js";
 import { ensureDir } from "../utils/paths.js";
 import { isWindows } from "../utils/platform.js";
 import { registerProject } from "./registry.js";
@@ -44,80 +44,6 @@ const CREATE_IF_MISSING = [
   "suggestions.json",
 ];
 
-// Use $CLAUDE_PROJECT_DIR so hooks resolve correctly even if CWD changes during a session
-const HOOK_SETTINGS = {
-  hooks: {
-    SessionStart: [
-      {
-        matcher: "",
-        hooks: [
-          {
-            type: "command",
-            command: 'node "$CLAUDE_PROJECT_DIR/.wolf/hooks/session-start.js"',
-            timeout: 5,
-          },
-        ],
-      },
-    ],
-    PreToolUse: [
-      {
-        matcher: "Read",
-        hooks: [
-          {
-            type: "command",
-            command: 'node "$CLAUDE_PROJECT_DIR/.wolf/hooks/pre-read.js"',
-            timeout: 5,
-          },
-        ],
-      },
-      {
-        matcher: "Write|Edit|MultiEdit",
-        hooks: [
-          {
-            type: "command",
-            command: 'node "$CLAUDE_PROJECT_DIR/.wolf/hooks/pre-write.js"',
-            timeout: 5,
-          },
-        ],
-      },
-    ],
-    PostToolUse: [
-      {
-        matcher: "Read",
-        hooks: [
-          {
-            type: "command",
-            command: 'node "$CLAUDE_PROJECT_DIR/.wolf/hooks/post-read.js"',
-            timeout: 5,
-          },
-        ],
-      },
-      {
-        matcher: "Write|Edit|MultiEdit",
-        hooks: [
-          {
-            type: "command",
-            command: 'node "$CLAUDE_PROJECT_DIR/.wolf/hooks/post-write.js"',
-            timeout: 10,
-          },
-        ],
-      },
-    ],
-    Stop: [
-      {
-        matcher: "",
-        hooks: [
-          {
-            type: "command",
-            command: 'node "$CLAUDE_PROJECT_DIR/.wolf/hooks/stop.js"',
-            timeout: 10,
-          },
-        ],
-      },
-    ],
-  },
-};
-
 export async function initCommand(): Promise<void> {
   // Check Node.js version
   const nodeVersion = parseInt(process.version.slice(1), 10);
@@ -141,7 +67,6 @@ export async function initCommand(): Promise<void> {
 
   // Create .wolf/ directory
   ensureDir(wolfDir);
-  ensureDir(path.join(wolfDir, "hooks"));
 
   // Find templates directory
   const actualTemplatesDir = findTemplatesDir();
@@ -179,38 +104,50 @@ export async function initCommand(): Promise<void> {
     writeJSON(ledgerPath, ledger);
   }
 
-  // --- Hook scripts: always update (bug fixes, new features) ---
-  copyHookScripts(wolfDir);
-
-  // --- Claude settings: replace OpenWolf hooks (upgrade old paths) ---
-  const claudeDir = path.join(projectRoot, ".claude");
-  ensureDir(claudeDir);
-
-  const settingsPath = path.join(claudeDir, "settings.json");
-  if (fs.existsSync(settingsPath)) {
-    const existing = readJSON<Record<string, unknown>>(settingsPath, {});
-    const merged = replaceOpenWolfHooks(existing, HOOK_SETTINGS);
-    writeJSON(settingsPath, merged);
-  } else {
-    writeJSON(settingsPath, HOOK_SETTINGS);
+  // --- AGENTS.md: create if missing ---
+  const agentsMdPath = path.join(projectRoot, "AGENTS.md");
+  if (!fs.existsSync(agentsMdPath)) {
+    const agentsContent = readTemplateContent("agents.md", actualTemplatesDir);
+    writeText(agentsMdPath, agentsContent);
   }
 
-  // --- Claude rules: always update ---
-  const rulesDir = path.join(claudeDir, "rules");
-  ensureDir(rulesDir);
-  const rulesContent = readTemplateContent("claude-rules-openwolf.md", actualTemplatesDir);
-  writeText(path.join(rulesDir, "openwolf.md"), rulesContent);
-
-  // --- CLAUDE.md: add snippet if missing ---
-  const claudeMdPath = path.join(projectRoot, "CLAUDE.md");
-  const snippetContent = readTemplateContent("claude-md-snippet.md", actualTemplatesDir);
-  if (fs.existsSync(claudeMdPath)) {
-    const existing = readText(claudeMdPath);
-    if (!existing.includes("OpenWolf")) {
-      writeText(claudeMdPath, snippetContent + "\n\n" + existing);
+  // --- opencode.json: create or merge ---
+  const opencodePath = path.join(projectRoot, "opencode.json");
+  const wolfInstructions = [".wolf/cerebrum.md", ".wolf/memory.md", ".wolf/anatomy.md"];
+  if (fs.existsSync(opencodePath)) {
+    try {
+      const existing = readJSON<Record<string, unknown>>(opencodePath, {});
+      const currentInstructions: string[] = Array.isArray(existing.instructions)
+        ? (existing.instructions as string[])
+        : [];
+      const merged = [...new Set([...wolfInstructions, ...currentInstructions])];
+      existing.instructions = merged;
+      writeJSON(opencodePath, existing);
+    } catch {
+      // File exists but is invalid JSON — leave it alone
     }
   } else {
-    writeText(claudeMdPath, snippetContent);
+    const template = readTemplateContent("opencode.json", actualTemplatesDir);
+    writeText(opencodePath, template);
+  }
+
+  // --- OpenCode plugin: always update (bug fixes) ---
+  const opencodePluginsDir = path.join(projectRoot, ".opencode", "plugins");
+  ensureDir(opencodePluginsDir);
+  const pluginSrc = path.join(actualTemplatesDir, "wolf-plugin.js");
+  const pluginDest = path.join(opencodePluginsDir, "wolf.js");
+  if (fs.existsSync(pluginSrc)) {
+    fs.copyFileSync(pluginSrc, pluginDest);
+  }
+
+  // --- .gitignore: ensure .wolf/hooks/_session.json is ignored ---
+  const gitignorePath = path.join(projectRoot, ".gitignore");
+  const sessionJsonEntry = ".wolf/hooks/_session.json";
+  if (fs.existsSync(gitignorePath)) {
+    const existing = readText(gitignorePath);
+    if (!existing.includes(sessionJsonEntry)) {
+      appendText(gitignorePath, `\n${sessionJsonEntry}\n`);
+    }
   }
 
   // --- Anatomy scan: only on fresh init ---
@@ -241,7 +178,11 @@ export async function initCommand(): Promise<void> {
     // Resolve daemon script relative to openwolf's install dir, not the target project
     const daemonScript = path.resolve(__dirname, "..", "daemon", "wolf-daemon.js");
     try {
-      execSync(`pm2 start "${daemonScript}" --name ${name} --cwd "${projectRoot}"`, {
+      execFileSync("pm2", [
+        "start", daemonScript,
+        "--name", name,
+        "--cwd", projectRoot,
+      ], {
         stdio: "ignore",
         env: { ...process.env, OPENWOLF_PROJECT_ROOT: projectRoot },
       });
@@ -257,7 +198,7 @@ export async function initCommand(): Promise<void> {
   // --- Register in central registry (skip if this IS the openwolf source repo) ---
   try {
     const projectName = detectProjectName(projectRoot);
-    if (projectName === "openwolf") {
+    if (projectName === "openwolf-opencode") {
       // Don't register the openwolf dev repo — it would get updated by `openwolf update`
     } else {
       registerProject(projectRoot, projectName, version);
@@ -271,20 +212,20 @@ export async function initCommand(): Promise<void> {
   if (isUpgrade) {
     console.log(`  ✓ OpenWolf upgraded to v${version}`);
     console.log(`  ✓ All .wolf data preserved (${skippedCount} files: cerebrum, memory, anatomy, buglog, ledger)`);
-    console.log(`  ✓ Hook scripts updated (6 hooks)`);
+    console.log(`  ✓ OpenCode plugin updated (.opencode/plugins/wolf.js)`);
     console.log(`  ✓ ${createdCount} config files updated`);
     console.log(`  ✓ Anatomy: ${fileCount} files tracked (unchanged)`);
   } else {
     console.log(`  ✓ OpenWolf v${version} initialized`);
     console.log(`  ✓ .wolf/ created with ${createdCount} files`);
-    console.log(`  ✓ Claude Code hooks registered (6 hooks)`);
-    console.log(`  ✓ CLAUDE.md updated`);
-    console.log(`  ✓ .claude/rules/openwolf.md created`);
+    console.log(`  ✓ AGENTS.md created`);
+    console.log(`  ✓ opencode.json configured`);
+    console.log(`  ✓ OpenCode plugin installed (.opencode/plugins/wolf.js)`);
     console.log(`  ✓ Anatomy scan: ${fileCount} files indexed`);
   }
   console.log(`  ✓ Daemon: ${daemonStatus}`);
   console.log("");
-  console.log("  You're ready. Just use 'claude' as normal — OpenWolf is watching.");
+  console.log("  You're ready. Just use your AI agent as normal — OpenWolf is watching.");
   console.log("");
 }
 
@@ -323,8 +264,8 @@ function readTemplateContent(filename: string, templatesDir: string): string {
 
 function getEmbeddedTemplate(filename: string): string {
   const templates: Record<string, string> = {
-    "claude-md-snippet.md": `# OpenWolf\n\n@.wolf/OPENWOLF.md\n\nThis project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.`,
-    "claude-rules-openwolf.md": `---\ndescription: OpenWolf protocol enforcement — active on all files\nglobs: **/*\n---\n\n- Check .wolf/anatomy.md before reading any project file\n- Check .wolf/cerebrum.md Do-Not-Repeat list before generating code\n- After writing or editing files, update .wolf/anatomy.md and append to .wolf/memory.md\n- After receiving a user correction, update .wolf/cerebrum.md immediately (Preferences, Learnings, or Do-Not-Repeat)\n- LEARN from every interaction: if you discover a convention, user preference, or project pattern, add it to .wolf/cerebrum.md. Low threshold — when in doubt, log it.\n- BEFORE fixing any bug or error: read .wolf/buglog.json for known fixes\n- AFTER fixing any bug, error, failed test, failed build, or user-reported problem: ALWAYS log to .wolf/buglog.json with error_message, root_cause, fix, and tags\n- If you edit a file more than twice in a session, that likely indicates a bug — log it to .wolf/buglog.json\n- When the user asks to check/evaluate UI design: run \`openwolf designqc\` to capture screenshots, then read them from .wolf/designqc-captures/\n- When the user asks to change/pick/migrate UI framework: read .wolf/reframe-frameworks.md, ask decision questions, recommend a framework, then execute with the framework's prompt`,
+    "agents.md": `# AGENTS.md\n\n@.wolf/OPENWOLF.md\n\nThis project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.`,
+    "opencode.json": JSON.stringify({ instructions: [".wolf/cerebrum.md", ".wolf/memory.md", ".wolf/anatomy.md"] }, null, 2),
   };
   return templates[filename] ?? "";
 }
@@ -342,7 +283,7 @@ function generateTemplate(destPath: string, file: string): void {
         enabled: true,
         anatomy: { auto_scan_on_init: true, rescan_interval_hours: 6, max_description_length: 100, max_files: 500, exclude_patterns: ["node_modules", ".git", "dist", "build", ".wolf", ".next", ".nuxt", "coverage", "__pycache__", ".cache", "target", ".vscode", ".idea", ".turbo", ".vercel", ".netlify", ".output", "*.min.js", "*.min.css"] },
         token_audit: { enabled: true, report_frequency: "weekly", waste_threshold_percent: 15, chars_per_token_code: 3.5, chars_per_token_prose: 4.0 },
-        cron: { enabled: true, max_retry_attempts: 3, dead_letter_enabled: true, heartbeat_interval_minutes: 30, use_claude_p: true, api_key_env: null },
+        cron: { enabled: true, max_retry_attempts: 3, dead_letter_enabled: true, heartbeat_interval_minutes: 30, providers: [{ type: "openai_api", priority: 1 }, { type: "anthropic_api", priority: 2 }, { type: "openrouter_api", priority: 3 }], fallback_on_rate_limit: true },
         memory: { consolidation_after_days: 7, max_entries_before_consolidation: 200 },
         cerebrum: { max_tokens: 2000, reflection_frequency: "weekly" },
         daemon: { port: 18790, log_level: "info" },
@@ -402,106 +343,6 @@ function seedIdentity(wolfDir: string, projectRoot: string): void {
     `**Role:** AI development assistant for ${projectName}`
   );
   writeText(identityPath, content);
-}
-
-function copyHookScripts(wolfDir: string): void {
-  const hooksDir = path.join(wolfDir, "hooks");
-  ensureDir(hooksDir);
-
-  // Look for compiled hooks in multiple possible locations relative to __dirname
-  // __dirname at runtime is dist/src/cli/ so ../hooks = dist/src/hooks/
-  const candidates = [
-    path.join(__dirname, "..", "hooks"),           // dist/src/hooks (from tsc main build)
-    path.resolve(__dirname, "..", "..", "hooks"),   // dist/hooks (from tsconfig.hooks.json)
-    path.resolve(__dirname, "..", "..", "dist", "hooks"), // fallback
-  ];
-  const srcHooksDir = path.resolve(__dirname, "..", "..", "src", "hooks");
-
-  let sourceDir = "";
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate) && fs.existsSync(path.join(candidate, "shared.js"))) {
-      sourceDir = candidate;
-      break;
-    }
-  }
-
-  const hookFiles = [
-    "session-start.js",
-    "pre-read.js",
-    "pre-write.js",
-    "post-read.js",
-    "post-write.js",
-    "stop.js",
-    "shared.js",
-  ];
-
-  let copiedAny = false;
-  if (sourceDir) {
-    for (const file of hookFiles) {
-      const src = path.join(sourceDir, file);
-      if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(hooksDir, file));
-        copiedAny = true;
-      }
-    }
-  } else if (fs.existsSync(srcHooksDir)) {
-    // Dev mode: compile TS hooks inline using a simple copy with note
-    // In practice, user should run `pnpm build:hooks` first
-    for (const file of hookFiles) {
-      const tsFile = file.replace(".js", ".ts");
-      const src = path.join(srcHooksDir, tsFile);
-      if (fs.existsSync(src)) {
-        const loaderContent = `#!/usr/bin/env node\n// Auto-generated by openwolf init — run 'pnpm build:hooks' for compiled version\nimport("${src.replace(/\\/g, "/")}");\n`;
-        fs.writeFileSync(path.join(hooksDir, file), loaderContent, "utf-8");
-        copiedAny = true;
-      }
-    }
-  }
-
-  if (!copiedAny) {
-    console.warn("  ⚠ Could not find compiled hook scripts. Run 'pnpm build:hooks' and re-run init.");
-  }
-
-  // Always write a package.json with type:module so ESM hooks work in any project
-  const hooksPkgPath = path.join(hooksDir, "package.json");
-  fs.writeFileSync(hooksPkgPath, JSON.stringify({ type: "module" }, null, 2) + "\n", "utf-8");
-}
-
-/**
- * Replace all OpenWolf hook entries in settings.json with the current version.
- * Removes old-style relative-path hooks and inserts the new $CLAUDE_PROJECT_DIR hooks.
- * Preserves any non-OpenWolf hooks the user may have added.
- */
-function replaceOpenWolfHooks(
-  existing: Record<string, unknown>,
-  hookSettings: typeof HOOK_SETTINGS
-): Record<string, unknown> {
-  const merged = { ...existing };
-  if (!merged.hooks) {
-    merged.hooks = {};
-  }
-  const hooks = merged.hooks as Record<string, Array<{ matcher: string; hooks: Array<{ command?: string; type: string }> }>>;
-
-  for (const [event, newMatchers] of Object.entries(hookSettings.hooks)) {
-    if (!hooks[event]) {
-      hooks[event] = [];
-    }
-
-    // Remove any existing OpenWolf hook entries (match by .wolf/hooks/ in command)
-    hooks[event] = hooks[event].filter((entry) => {
-      const isOpenWolfHook = entry.hooks?.some(
-        (h) => h.command && h.command.includes(".wolf/hooks/")
-      );
-      return !isOpenWolfHook;
-    });
-
-    // Add the new OpenWolf hooks
-    for (const matcher of newMatchers) {
-      hooks[event].push(matcher);
-    }
-  }
-
-  return merged;
 }
 
 function detectProjectName(projectRoot: string): string {

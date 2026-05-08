@@ -1,242 +1,219 @@
-<p align="center">
-  <img src="demo.gif" alt="OpenWolf demo" width="640" />
-</p>
+<div align="center">
+<br/>
 
-<h1 align="center">OpenWolf</h1>
+# 🐺 openwolf-opencode
 
-<p align="center">
-  <strong>A second brain for Claude Code.</strong><br />
-  Project intelligence, token tracking, and invisible enforcement through 6 hook scripts. Zero workflow changes.
-</p>
+### Persistent memory · anatomy indexing · background intelligence
+### for OpenCode and any AI coding agent
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/openwolf"><img src="https://img.shields.io/npm/v/openwolf.svg" alt="npm version" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-20%2B-green.svg" alt="Node.js" /></a>
-</p>
+<br/>
+
+[![npm version](https://img.shields.io/npm/v/openwolf-opencode?style=flat-square&color=crimson)](https://www.npmjs.com/package/openwolf-opencode)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen?style=flat-square)](https://nodejs.org)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
+[![Fork of openwolf](https://img.shields.io/badge/fork%20of-cytostack%2Fopenwolf-555?style=flat-square)](https://github.com/cytostack/openwolf)
+
+<br/>
+
+*A [cytostack/openwolf](https://github.com/cytostack/openwolf) fork — built for **OpenCode** users, no Claude Code required.*
+
+<br/>
+
+</div>
 
 ---
 
-## Why OpenWolf Exists
+## 🧠 What it does
 
-Claude Code is powerful but it works blind. It doesn't know what a file contains until it opens it. It can't tell a 50-token config from a 2,000-token module. It reads the same file multiple times in one session without noticing. It has no index of your project, no memory of your corrections, and no awareness of what it already tried.
+AI coding agents forget everything when a session ends. openwolf-opencode fixes that.
 
-OpenWolf gives Claude a second brain: a file index so it knows what files contain before reading them, a learning memory that accumulates your preferences and past mistakes, and a token ledger that tracks everything. All through 6 invisible hook scripts that fire on every Claude action.
+It maintains a set of `.wolf/` files that your agent reads at session start and updates after every meaningful action — giving it **memory, context, and discipline** across sessions. An OpenCode plugin wires the context in automatically, and an `AGENTS.md` provides the session protocol for any compatible agent.
 
-## Token Comparison
+<br/>
 
-Tested on a large active project. Same codebase, same prompts, different setups:
+| File | What your agent uses it for |
+|:---|:---|
+| 🧬 `.wolf/cerebrum.md` | Learned preferences, do-not-repeat rules, key decisions |
+| 📜 `.wolf/memory.md` | Chronological action log — session continuity |
+| 🗺️ `.wolf/anatomy.md` | Auto-indexed file map with token estimates — no redundant reads |
+| 🐛 `.wolf/buglog.json` | Bug registry — read before fixing, updated after every fix |
 
-```
-OpenClaw + Claude          ██████████████████████████████████████  ~3.4M tokens
-Claude CLI (no OpenWolf)   ████████████████████████████████        ~2.5M tokens
-OpenWolf + Claude CLI      ████████                                ~425K tokens
-```
+<br/>
 
-**OpenWolf saved ~80% of tokens** compared to bare Claude CLI on the same project.
+A **background daemon** handles anatomy rescans, memory consolidation, and weekly AI suggestions — using your choice of OpenAI, Anthropic, or OpenRouter, with automatic provider fallback. A **local dashboard** lets you browse everything visually.
 
-Across 20 projects, 132+ sessions: average token reduction of 65.8%, with 71% of repeated file reads caught and blocked. These are numbers from real usage, not benchmarks. Your results will vary by project size and usage patterns.
+---
 
-## Quick Start
+## ⚡ Quickstart
 
 ```bash
-npm install -g openwolf
+npm install -g openwolf-opencode
 cd your-project
-openwolf init
+wolf init
 ```
 
-That's it. Use `claude` normally. OpenWolf is watching.
-
-## What It Creates
-
-`openwolf init` creates a `.wolf/` directory in your project:
-
-| File | Purpose |
-|------|---------|
-| `anatomy.md` | Project file map with descriptions and token estimates |
-| `cerebrum.md` | Learned preferences, corrections, Do-Not-Repeat list |
-| `memory.md` | Chronological action log with token estimates |
-| `buglog.json` | Bug fix memory, searchable, prevents re-discovery |
-| `token-ledger.json` | Lifetime token tracking and session history |
-| `hooks/` | 6 Claude Code lifecycle hooks (pure Node.js) |
-| `config.json` | Configuration with sensible defaults |
-| `identity.md` | Agent persona for this project |
-| `OPENWOLF.md` | Instructions Claude follows every session |
-
-## How It Works
-
-Before Claude reads a file, OpenWolf tells it what the file contains and how large it is. If Claude already read that file this session, OpenWolf warns it. Before Claude writes code, OpenWolf checks your `cerebrum.md` for known mistakes. After every write, it auto-updates the project map and logs token usage. You see none of this. It just happens.
+That's it. `init` sets up everything:
 
 ```
-You type a message
-    ↓
-Claude decides to read a file
-    ↓
-OpenWolf: "anatomy.md says this file is ~380 tokens. Description: Main entry point."
-    ↓
-Claude reads the file
-    ↓
-OpenWolf: logs the read, estimates tokens, checks for repeated reads
-    ↓
-Claude writes code
-    ↓
-OpenWolf: checks cerebrum.md - no known mistakes matched
-    ↓
-Claude finishes
-    ↓
-OpenWolf: updates anatomy.md, appends to memory.md, updates token ledger
+your-project/
+├── .wolf/                        ← state files (cerebrum, memory, anatomy, buglog…)
+├── .opencode/
+│   └── plugins/
+│       └── wolf.js              ← OpenCode plugin (session + compaction hooks)
+├── opencode.json                 ← OpenCode config (wolf files wired in as instructions)
+└── AGENTS.md                     ← session protocol for any AI coding agent
 ```
 
-## The .wolf/ Files
+> The daemon is started automatically via pm2 if available.
 
-<details>
-<summary><strong>cerebrum.md</strong> - the learning memory</summary>
+---
 
-Claude updates this file when you correct it, express a preference, or make a decision. The Do-Not-Repeat list prevents the same mistake across sessions.
+## 🔄 How a session works
 
-```markdown
-## Do-Not-Repeat
+```
+START  →  OpenCode reads opencode.json, loads wolf files as context automatically
+          └─ reads cerebrum.md, memory.md, anatomy.md
+          └─ wolf.js plugin appends a session entry to memory.md
 
-- 2026-03-10: Never use `var` - always `const` or `let`
-- 2026-03-11: Don't mock the database in integration tests - use the real connection
-- 2026-03-14: The auth middleware reads from `cfg.talk`, not `cfg.tts` - got burned twice
+WORK   →  Agent updates wolf files after every meaningful action
+          └─ Check anatomy.md before reading any file
+          └─ Log decisions and corrections to cerebrum.md
+          └─ Log fixed bugs to buglog.json
 
-## User Preferences
-
-- Prefers functional components over class components
-- Always use named exports, never default exports
-- Tests go in `__tests__/` next to the source file
-
-## Key Learnings
-
-- This project uses pnpm workspaces with strict hoisting
-- The API rate limiter uses a sliding window, not fixed buckets
-- Auth middleware reads from env.JWT_SECRET, not config file
+END    →  Append a session summary to .wolf/memory.md
+          Update cerebrum.md with new learnings
 ```
 
-</details>
+---
 
-<details>
-<summary><strong>anatomy.md</strong> - the project map</summary>
+## 🔌 OpenCode integration
 
-Every file gets a description and token estimate. Claude reads this instead of opening files when the summary is enough.
-
-```markdown
-## src/
-
-- `index.ts` - Main entry point. Exports createProgram() for CLI. (~180 tok)
-- `server.ts` - Express HTTP server with middleware chain. (~520 tok)
-
-## src/api/
-
-- `auth.ts` - JWT validation middleware. Reads from env.JWT_SECRET. (~340 tok)
-- `users.ts` - CRUD endpoints for /api/users. Pagination via query params. (~890 tok)
-```
-
-</details>
-
-<details>
-<summary><strong>token-ledger.json</strong> - the receipt</summary>
-
-Every session gets a line item. Lifetime totals tell you if OpenWolf is actually saving tokens.
+After `wolf init`, OpenCode automatically receives your wolf files as context on every session. No manual steps. The plugin (`wolf.js`) also preserves wolf context **across session compaction** — so even when OpenCode splits a long session, cerebrum and memory stay in scope.
 
 ```json
+// opencode.json — generated by wolf init
 {
-    "lifetime": {
-        "total_tokens_estimated": 503978,
-        "total_reads": 287,
-        "total_writes": 269,
-        "total_sessions": 15,
-        "anatomy_hits": 198,
-        "anatomy_misses": 89,
-        "repeated_reads_blocked": 106,
-        "estimated_savings_vs_bare_cli": 2066959
-    }
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    ".wolf/cerebrum.md",
+    ".wolf/memory.md",
+    ".wolf/anatomy.md"
+  ]
 }
 ```
 
-</details>
+On re-running `wolf init`, the instructions list is **merged**, never overwritten — safe to run on projects that already have an `opencode.json`.
 
-<details>
-<summary><strong>buglog.json</strong> - the bug memory</summary>
+---
 
-Before fixing anything, Claude checks if the fix is already known. After fixing, it logs the solution.
+## ⏱️ Background daemon
 
-```json
-{
-    "id": "bug-012",
-    "error_message": "TypeError: Cannot read properties of undefined (reading 'map')",
-    "file": "src/components/UserList.tsx",
-    "root_cause": "API response was null when users array was expected",
-    "fix": "Added optional chaining: data?.users?.map() and fallback empty array",
-    "tags": ["null-check", "api-response", "react"]
-}
-```
+Scheduled tasks run via your configured AI provider chain:
 
-</details>
-
-## Commands
-
-```
-openwolf init              Initialize .wolf/ and register hooks
-openwolf status            Show health, stats, file integrity
-openwolf scan              Refresh the project structure map
-openwolf scan --check      Verify anatomy matches filesystem (exits 1 if stale)
-openwolf dashboard         Open the real-time web dashboard
-openwolf daemon start      Start background task scheduler
-openwolf daemon stop       Stop the scheduler
-openwolf daemon restart    Restart the scheduler
-openwolf daemon logs       View scheduler logs
-openwolf cron list         Show all scheduled tasks
-openwolf cron run <id>     Trigger a task manually
-openwolf cron retry <id>   Retry a dead-lettered task
-openwolf designqc          Capture full-page screenshots for design evaluation
-openwolf bug search <term> Search bug memory for known fixes
-openwolf update            Update all registered projects to latest version
-openwolf restore [backup]  Restore .wolf/ from a timestamped backup
-```
-
-## Design QC
-
-Capture full-page screenshots of your running app and let Claude evaluate the design.
+| Task | Schedule | Description |
+|:---|:---|:---|
+| Anatomy rescan | Every 6h | Re-indexes project files |
+| Memory consolidation | Daily 02:00 | Compresses old session entries |
+| Token audit | Weekly Mon | Detects context waste patterns |
+| Cerebrum reflection | Weekly Sun 03:00 | AI prunes and deduplicates cerebrum.md |
+| AI suggestions | Weekly Mon 04:00 | Generates actionable project improvements |
 
 ```bash
-openwolf designqc
+wolf daemon start      # start manually
+wolf daemon stop       # stop
+wolf daemon restart    # restart
+wolf daemon logs       # view recent output
 ```
 
-Auto-detects your dev server, captures viewport-height JPEG sections of every route, and saves them to `.wolf/designqc-captures/`. Then tell Claude to read the screenshots and evaluate. Requires `puppeteer-core`.
+---
 
-## Reframe
+## 📊 Dashboard
 
-Ask Claude to help you pick a UI framework. OpenWolf ships a curated knowledge base of 12 frameworks (shadcn/ui, Aceternity, Magic UI, DaisyUI, HeroUI, Chakra, Flowbite, Preline, Park UI, Origin UI, Headless UI, Cult UI) with battle-tested migration prompts. Claude reads `.wolf/reframe-frameworks.md`, asks you a few questions, and executes the migration with the right prompt for your project.
+```bash
+wolf dashboard
+# → opens http://localhost:18791
+```
 
-## How OpenWolf Compares
+Memory viewer · anatomy browser · cron status · token usage graphs · AI suggestions
 
-OpenWolf is not an AI wrapper. It is 6 hook scripts and a `.wolf/` directory. It doesn't run your AI for you or change your workflow. It gives Claude Code what it lacks: a project map so it reads less, a memory so it learns faster, and a ledger so you see where tokens go.
+---
 
-## Requirements
+## 🛠️ All commands
 
-- Node.js 20+
-- Claude Code CLI
-- Windows, macOS, or Linux
-- Optional: PM2 for persistent background tasks
-- Optional: `puppeteer-core` for Design QC screenshots
+```
+wolf init               Initialize (or upgrade) in current project
+wolf scan               Re-scan anatomy
+wolf scan --check       Verify anatomy matches filesystem (exits 1 if stale)
+wolf status             Show project status and OpenCode integration health
+wolf daemon start       Start background daemon
+wolf daemon stop        Stop background daemon
+wolf daemon restart     Restart background daemon
+wolf daemon logs        View recent daemon output
+wolf cron list          List scheduled tasks
+wolf cron run <id>      Run a cron task manually
+wolf cron retry <id>    Retry a dead-lettered task
+wolf dashboard          Open dashboard
+wolf designqc           Capture UI screenshots for design review
+wolf bug search <term>  Search bug memory for known fixes
+wolf update             Update wolf files across all registered projects
+wolf restore [backup]   Restore .wolf/ from a timestamped backup
+```
 
-## Limitations
+---
 
-- Claude Code hooks are a relatively new feature. OpenWolf falls back to `CLAUDE.md` instructions when hooks don't fire.
-- Token tracking is estimation-based (character-to-token ratio), not exact API counts. Accurate to within ~15%.
-- `cerebrum.md` depends on Claude following instructions to update it after corrections. Compliance is ~85-90%, not 100%.
-- This is v1.0.4. Things may break. [File issues](https://github.com/cytostack/openwolf/issues).
+## ⚙️ Configuration
 
-## Origin Story
+`.wolf/config.json` controls all behaviour.
 
-We were building products with Claude Code at Cytostack when we noticed something off. Sessions were eating through tokens faster than they should. When we dug in, we found Claude re-reading the same files multiple times, scanning entire directories to find one function, and having no way to know what a file contained without opening it. There was no project map, no read awareness, no token visibility. So we built the tooling we wished existed -- a file index so Claude reads less, a learning memory so it gets smarter, and a ledger that tracks every token. That became OpenWolf.
+### AI providers (with fallback)
 
-## License
+The daemon supports multiple AI providers. If one hits a rate limit or is unavailable, it falls back to the next in priority order:
 
-[AGPL-3.0](LICENSE)
+```json
+"cron": {
+  "enabled": true,
+  "fallback_on_rate_limit": true,
+  "providers": [
+    { "type": "openai_api",     "priority": 1 },
+    { "type": "anthropic_api",  "priority": 2 },
+    { "type": "openrouter_api", "priority": 3 }
+  ]
+}
+```
 
-## Author
+| Provider | Required env var | Default model |
+|:---|:---|:---|
+| `openai_api` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| `anthropic_api` | `ANTHROPIC_API_KEY` | `claude-3-5-haiku-20241022` |
+| `openrouter_api` | `OPENROUTER_API_KEY` | `openai/gpt-4o-mini` |
 
-Built by Farhan Palathinkal Afsal - [Cytostack](https://github.com/cytostack)
+Providers with missing API keys are automatically skipped. You only need env vars for the providers you want. Override the model per-provider with `OPENAI_MODEL`, `ANTHROPIC_MODEL`, or `OPENROUTER_MODEL`.
+
+---
+
+## 📦 Requirements
+
+- **Node.js** 20+
+- **OpenCode** — or any AI coding agent that reads `AGENTS.md`
+- **pm2** *(optional, for background daemon)* — `npm install -g pm2`
+- **puppeteer-core** *(optional, for Design QC screenshots)*
+
+---
+
+## 🔁 Upgrading
+
+```bash
+npm install -g openwolf-opencode
+cd your-project
+wolf init
+```
+
+Re-running `init` upgrades the OpenCode plugin and config files while **preserving all user data** — cerebrum, memory, anatomy, and buglog are never overwritten.
+
+---
+
+<div align="center">
+
+AGPL-3.0-only &nbsp;·&nbsp; fork of [cytostack/openwolf](https://github.com/cytostack/openwolf)
+
+</div>

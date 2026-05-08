@@ -1,15 +1,14 @@
 {
-  "name": "openwolf",
+  "name": "openwolf-opencode",
   "version": "1.0.4",
-  "description": "Token-conscious AI brain for Claude Code projects",
+  "description": "Persistent AI memory and project context for OpenCode and any AI coding agent",
   "type": "module",
   "bin": {
-    "openwolf": "./dist/bin/openwolf.js"
+    "wolf": "./dist/bin/openwolf.js"
   },
   "scripts": {
     "prebuild": "node -e \"const fs=require('fs');if(fs.existsSync('dist'))fs.rmSync('dist',{recursive:true})\"",
-    "build": "tsc && pnpm build:hooks && pnpm build:dashboard",
-    "build:hooks": "tsc -p tsconfig.hooks.json",
+    "build": "tsc && pnpm build:dashboard",
     "build:dashboard": "cd src/dashboard/app && npx vite build --outDir ../../../dist/dashboard",
     "dev": "tsc --watch",
     "docs:dev": "vitepress dev docs",
@@ -59,12 +58,11 @@
     "url": "https://github.com/cytostack/openwolf/issues"
   },
   "keywords": [
-    "claude",
+    "opencode",
     "ai",
     "context",
     "token",
     "openwolf",
-    "claude-code",
     "developer-tools"
   ],
   "files": [

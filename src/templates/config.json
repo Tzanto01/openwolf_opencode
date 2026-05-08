@@ -41,8 +41,12 @@
       "max_retry_attempts": 3,
       "dead_letter_enabled": true,
       "heartbeat_interval_minutes": 30,
-      "use_claude_p": true,
-      "api_key_env": null
+      "providers": [
+        { "type": "openai_api", "priority": 1 },
+        { "type": "anthropic_api", "priority": 2 },
+        { "type": "openrouter_api", "priority": 3 }
+      ],
+      "fallback_on_rate_limit": true
     },
     "memory": {
       "consolidation_after_days": 7,

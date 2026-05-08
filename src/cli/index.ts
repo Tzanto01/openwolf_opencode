@@ -25,7 +25,7 @@ export function createProgram(): Command {
 
   program
     .name("openwolf")
-    .description("Token-conscious AI brain for Claude Code projects")
+    .description("Persistent AI memory and project context for OpenCode and any AI coding agent")
     .version(getVersion());
 
   program
@@ -141,7 +141,7 @@ export function createProgram(): Command {
   // --- Design QC command ---
   program
     .command("designqc [target]")
-    .description("Capture full-page screenshots for design evaluation by Claude Code")
+    .description("Capture full-page screenshots for design evaluation by AI agent")
     .option("--url <url>", "Dev server URL (auto-starts server if omitted)")
     .option("--routes <routes...>", "Specific routes to check")
     .option("--quality <n>", "JPEG quality 1-100 (lower = fewer tokens)", "70")

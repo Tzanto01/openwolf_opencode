@@ -8,7 +8,7 @@ export async function statusCommand(): Promise<void> {
   const wolfDir = path.join(projectRoot, ".wolf");
 
   if (!fs.existsSync(wolfDir)) {
-    console.log("OpenWolf not initialized. Run: openwolf init");
+    console.log("OpenWolf not initialized. Run: wolf init");
     return;
   }
 
@@ -34,33 +34,19 @@ export async function statusCommand(): Promise<void> {
     console.log(`  ✓ All ${requiredFiles.length} core files present`);
   }
 
-  // Hook scripts check
-  const hookFiles = [
-    "session-start.js", "pre-read.js", "pre-write.js",
-    "post-read.js", "post-write.js", "stop.js", "shared.js",
-  ];
-  const hooksDir = path.join(wolfDir, "hooks");
-  let hooksMissing = 0;
-  for (const file of hookFiles) {
-    if (!fs.existsSync(path.join(hooksDir, file))) hooksMissing++;
-  }
-  if (hooksMissing === 0) {
-    console.log(`  ✓ All ${hookFiles.length} hook scripts present`);
+  // OpenCode integration check
+  const opencodePath = path.join(projectRoot, "opencode.json");
+  if (fs.existsSync(opencodePath)) {
+    console.log(`  ✓ OpenCode configured (opencode.json)`);
   } else {
-    console.log(`  ✗ Missing ${hooksMissing} hook scripts`);
+    console.log(`  ✗ opencode.json not found — run wolf init`);
   }
 
-  // Claude settings check
-  const settingsPath = path.join(projectRoot, ".claude", "settings.json");
-  if (fs.existsSync(settingsPath)) {
-    const settings = readJSON<Record<string, unknown>>(settingsPath, {});
-    const hooks = settings.hooks as Record<string, unknown[]> | undefined;
-    if (hooks) {
-      const hookCount = Object.values(hooks).reduce((sum, arr) => sum + arr.length, 0);
-      console.log(`  ✓ Claude Code hooks registered (${hookCount} matchers)`);
-    }
+  const pluginPath = path.join(projectRoot, ".opencode", "plugins", "wolf.js");
+  if (fs.existsSync(pluginPath)) {
+    console.log(`  ✓ OpenCode plugin installed (.opencode/plugins/wolf.js)`);
   } else {
-    console.log("  ✗ .claude/settings.json not found");
+    console.log(`  ✗ OpenCode plugin not installed — run wolf init`);
   }
 
   // Token ledger stats

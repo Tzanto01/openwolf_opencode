@@ -1,6 +1,5 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execSync, spawnSync } from "node:child_process";
 import cron from "node-cron";
 import { readJSON, writeJSON, readText, writeText, appendText } from "../utils/fs-safe.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
@@ -295,87 +294,127 @@ export class CronEngine {
     writeJSON(ledgerPath, ledger);
   }
 
-  private hasClaude(): boolean {
-    try {
-      const cmd = process.platform === "win32" ? "where claude" : "which claude";
-      execSync(cmd, { stdio: "ignore" });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   private async runAiTask(params: { prompt: string; context_files: string[] }): Promise<void> {
-    if (!this.hasClaude()) {
-      throw new Error("Claude CLI not found. Install it from https://claude.ai/download or add it to PATH.");
-    }
-
+    // Build context — with path traversal protection
+    const projectRootResolved = path.resolve(this.projectRoot);
     const contextParts: string[] = [];
     for (const file of params.context_files) {
-      const filePath = path.join(this.projectRoot, file);
+      const filePath = path.resolve(this.projectRoot, file);
+      if (!filePath.startsWith(projectRootResolved + path.sep)) {
+        this.logger.warn(`Skipping context file outside project root: ${file}`);
+        continue;
+      }
       try {
         contextParts.push(`--- ${file} ---\n${fs.readFileSync(filePath, "utf-8")}`);
       } catch {
         contextParts.push(`--- ${file} --- (not found)`);
       }
     }
-
     const fullPrompt = `${params.prompt}\n\n---\nContext:\n${contextParts.join("\n\n")}`;
 
-    try {
-      // Use spawnSync to pipe prompt via stdin — avoids command-line length limits on Windows
-      // claude -p (no argument) reads prompt from stdin
-      // Strip ANTHROPIC_API_KEY so claude uses OAuth subscription credentials
-      // instead of a potentially depleted API key
-      const env = { ...process.env };
-      delete env.ANTHROPIC_API_KEY;
+    // Read provider config from .wolf/config.json
+    const config = readJSON<Record<string, unknown>>(
+      path.join(this.wolfDir, "config.json"), {}
+    );
+    const cronConfig = (config as any)?.openwolf?.cron ?? {};
+    const providers: Array<{ type: string; priority: number }> =
+      cronConfig.providers ?? [{ type: "openai_api", priority: 1 }];
+    const sorted = [...providers].sort((a, b) => a.priority - b.priority);
 
-      const proc = spawnSync("claude -p --output-format text", {
-        input: fullPrompt,
-        timeout: 120000,
-        encoding: "utf-8",
-        cwd: this.projectRoot,
-        env,
-        stdio: ["pipe", "pipe", "pipe"],
-        // shell: true needed on Windows so that claude.cmd is resolved
-        shell: true,
-        windowsHide: true,
-      });
-
-      if (proc.error) {
-        throw proc.error;
-      }
-
-      if (proc.status !== 0) {
-        const stderr = proc.stderr?.trim();
-        const stdout = proc.stdout?.trim();
-        const errMsg = stderr || stdout || "Unknown error";
-        throw new Error(`Exit code ${proc.status}: ${errMsg}`);
-      }
-
-      let result = (proc.stdout || "").replace(/\r\n/g, "\n").trim();
-
-      // Strip markdown code fences if present (```markdown ... ``` or ```json ... ```)
-      const fenceMatch = result.match(/```[\w]*\n([\s\S]*?)\n```/);
-      if (fenceMatch) {
-        result = fenceMatch[1].trim();
-      }
-
-      // Write result to suggestions.json if it looks like JSON
+    let lastError: Error | null = null;
+    for (const provider of sorted) {
       try {
-        const parsed = JSON.parse(result);
-        writeJSON(path.join(this.wolfDir, "suggestions.json"), {
-          generated_at: new Date().toISOString(),
-          ...parsed,
-        });
-      } catch {
-        // Not JSON, might be a cerebrum update
-        if (result.includes("## User Preferences") || result.includes("## Key Learnings") || result.includes("# Cerebrum")) {
-          writeText(path.join(this.wolfDir, "cerebrum.md"), result);
-        }
+        const result = await this.callProvider(provider.type, fullPrompt);
+        await this.handleAiResult(result);
+        return;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        this.logger.warn(`Provider ${provider.type} failed: ${lastError.message}. Trying next...`);
       }
-    } catch (err) {
-      throw new Error(`claude -p failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    throw lastError ?? new Error("All AI providers failed");
+  }
+
+  private async callProvider(type: string, prompt: string): Promise<string> {
+    switch (type) {
+      case "openai_api": {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+        const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          if (res.status === 429) throw new Error(`rate_limited: ${text}`);
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        const data = (await res.json()) as { choices: [{ message: { content: string } }] };
+        return data.choices[0].message.content;
+      }
+      case "anthropic_api": {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+        const model = process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-20241022";
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({ model, max_tokens: 1024, messages: [{ role: "user", content: prompt }] }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          if (res.status === 429) throw new Error(`rate_limited: ${text}`);
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        const data = (await res.json()) as { content: [{ text: string }] };
+        return data.content[0].text;
+      }
+      case "openrouter_api": {
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
+        const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          if (res.status === 429) throw new Error(`rate_limited: ${text}`);
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        const data = (await res.json()) as { choices: [{ message: { content: string } }] };
+        return data.choices[0].message.content;
+      }
+      default:
+        throw new Error(`Unknown provider type: ${type}`);
+    }
+  }
+
+  private async handleAiResult(result: string): Promise<void> {
+    const text = result.replace(/\r\n/g, "\n").trim();
+    // Strip markdown fences if present
+    const fenceMatch = text.match(/```[\w]*\n([\s\S]*?)\n```/);
+    const clean = fenceMatch ? fenceMatch[1].trim() : text;
+    try {
+      const parsed = JSON.parse(clean);
+      writeJSON(path.join(this.wolfDir, "suggestions.json"), {
+        generated_at: new Date().toISOString(),
+        ...parsed,
+      });
+    } catch {
+      if (clean.includes("## User Preferences") || clean.includes("## Key Learnings") || clean.includes("# Cerebrum")) {
+        writeText(path.join(this.wolfDir, "cerebrum.md"), clean);
+      }
     }
   }
 }
