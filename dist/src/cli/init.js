@@ -174,6 +174,22 @@ export async function initCommand() {
     if (fs.existsSync(pluginSrc)) {
         fs.copyFileSync(pluginSrc, pluginDest);
     }
+    // --- .git/hooks: remove any stale wolf pre-commit hooks from old openwolf ---
+    const gitHooksDir = path.join(projectRoot, ".git", "hooks");
+    if (fs.existsSync(gitHooksDir)) {
+        const gitHookFiles = fs.readdirSync(gitHooksDir).filter((f) => !f.endsWith(".sample"));
+        for (const hookFile of gitHookFiles) {
+            const hookPath = path.join(gitHooksDir, hookFile);
+            try {
+                const content = fs.readFileSync(hookPath, "utf-8");
+                if (content.includes(".wolf/hooks/")) {
+                    fs.unlinkSync(hookPath);
+                    console.log(`  ✓ Removed stale wolf git hook: .git/hooks/${hookFile}`);
+                }
+            }
+            catch { /* non-fatal */ }
+        }
+    }
     // --- .gitignore: add wolf runtime/generated entries (only once) ---
     // Only project-knowledge files are committed; ephemeral runtime files are ignored.
     const gitignorePath = path.join(projectRoot, ".gitignore");

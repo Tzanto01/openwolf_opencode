@@ -114,6 +114,26 @@ export async function migrateCommand(): Promise<void> {
     console.log("  ○ No old hook scripts found");
   }
 
+  // ── 3a. Remove wolf entries from .git/hooks/ ─────────────────────────
+  const gitHooksDir = path.join(projectRoot, ".git", "hooks");
+  if (fs.existsSync(gitHooksDir)) {
+    const gitHookFiles = fs.readdirSync(gitHooksDir).filter((f) => !f.endsWith(".sample"));
+    let removedGitHooks = 0;
+    for (const hookFile of gitHookFiles) {
+      const hookPath = path.join(gitHooksDir, hookFile);
+      try {
+        const content = fs.readFileSync(hookPath, "utf-8");
+        if (content.includes(".wolf/hooks/")) {
+          fs.unlinkSync(hookPath);
+          removedGitHooks++;
+        }
+      } catch { /* non-fatal */ }
+    }
+    if (removedGitHooks > 0) {
+      console.log(`  ✓ Removed ${removedGitHooks} wolf git hook(s) from .git/hooks/`);
+    }
+  }
+
   // ── 3. Strip wolf hooks from .claude/settings.json ───────────────────
   const claudeSettingsPath = path.join(projectRoot, ".claude", "settings.json");
   if (fs.existsSync(claudeSettingsPath)) {
