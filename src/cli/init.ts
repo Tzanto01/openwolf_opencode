@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline/promises";
 import { execSync, execFileSync } from "node:child_process";
 import { findProjectRoot } from "../scanner/project-root.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
@@ -9,6 +10,13 @@ import { ensureDir } from "../utils/paths.js";
 import { isWindows } from "../utils/platform.js";
 import { registerProject } from "./registry.js";
 import { assignProjectPorts } from "../utils/ports.js";
+import {
+  isOldOpenwolfInstalled,
+  uninstallOldOpenwolf,
+  WOLF_GITIGNORE_BLOCK,
+  WOLF_GITIGNORE_SENTINEL,
+  WOLF_AGENTS_SENTINEL,
+} from "../utils/detect.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +59,39 @@ export async function initCommand(): Promise<void> {
   if (nodeVersion < 20) {
     console.error(`Node.js 20+ required. Current: ${process.version}`);
     process.exit(1);
+  }
+
+  // ── Old openwolf detection ────────────────────────────────────────────
+  // openwolf-opencode is a full replacement. Having both installed simultaneously
+  // causes PATH confusion and serves no purpose.
+  if (isOldOpenwolfInstalled()) {
+    console.log("⚠  Old openwolf package detected on PATH.");
+    console.log("   openwolf-opencode is a full replacement — having both installed");
+    console.log("   causes confusion and serves no purpose.");
+    console.log("");
+
+    if (!process.stdin.isTTY) {
+      // Non-interactive (CI / piped) — skip prompt, continue without removing
+      console.log("   Non-interactive mode: skipping auto-removal.");
+      console.log("   Remove it manually when ready: npm uninstall -g openwolf");
+    } else {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await rl.question("   Auto-remove openwolf now? [Y/n]: ");
+      rl.close();
+
+      if (answer.trim().toLowerCase() !== "n") {
+        if (uninstallOldOpenwolf()) {
+          console.log("  ✓ Removed old openwolf.");
+        } else {
+          console.log("  ✗ Auto-removal failed. Remove it manually:");
+          console.log("      npm uninstall -g openwolf");
+          console.log("  Continuing init...");
+        }
+      } else {
+        console.log("   Skipping. Remove it later with: npm uninstall -g openwolf");
+      }
+    }
+    console.log("");
   }
 
   // Detect project root
@@ -110,11 +151,20 @@ export async function initCommand(): Promise<void> {
     writeJSON(ledgerPath, ledger);
   }
 
-  // --- AGENTS.md: create if missing ---
+  // --- AGENTS.md: create if missing, or append wolf section if sentinel absent ---
+  // Never overwrite existing content — other agents/frameworks may share this file.
   const agentsMdPath = path.join(projectRoot, "AGENTS.md");
+  const agentsSection = readTemplateContent("agents.md", actualTemplatesDir);
   if (!fs.existsSync(agentsMdPath)) {
-    const agentsContent = readTemplateContent("agents.md", actualTemplatesDir);
-    writeText(agentsMdPath, agentsContent);
+    writeText(agentsMdPath, agentsSection + "\n");
+    console.log("  ✓ Created AGENTS.md");
+  } else {
+    const existing = readText(agentsMdPath);
+    if (!existing.includes(WOLF_AGENTS_SENTINEL)) {
+      appendText(agentsMdPath, `\n${agentsSection}\n`);
+      console.log("  ✓ Appended OpenWolf section to existing AGENTS.md");
+    }
+    // else: wolf section already present — leave the file untouched
   }
 
   // --- opencode.json: create or merge ---
@@ -146,14 +196,16 @@ export async function initCommand(): Promise<void> {
     fs.copyFileSync(pluginSrc, pluginDest);
   }
 
-  // --- .gitignore: ensure .wolf/hooks/_session.json is ignored ---
+  // --- .gitignore: add wolf runtime/generated entries (only once) ---
+  // Only project-knowledge files are committed; ephemeral runtime files are ignored.
   const gitignorePath = path.join(projectRoot, ".gitignore");
-  const sessionJsonEntry = ".wolf/hooks/_session.json";
   if (fs.existsSync(gitignorePath)) {
     const existing = readText(gitignorePath);
-    if (!existing.includes(sessionJsonEntry)) {
-      appendText(gitignorePath, `\n${sessionJsonEntry}\n`);
+    if (!existing.includes(WOLF_GITIGNORE_SENTINEL)) {
+      appendText(gitignorePath, WOLF_GITIGNORE_BLOCK);
     }
+  } else {
+    writeText(gitignorePath, WOLF_GITIGNORE_BLOCK.trimStart());
   }
 
   // --- Anatomy scan: only on fresh init ---
@@ -270,7 +322,20 @@ function readTemplateContent(filename: string, templatesDir: string): string {
 
 function getEmbeddedTemplate(filename: string): string {
   const templates: Record<string, string> = {
-    "agents.md": `# AGENTS.md\n\n@.wolf/OPENWOLF.md\n\nThis project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.`,
+    "agents.md": [
+      "<!-- openwolf-start -->",
+      "## OpenWolf Memory",
+      "",
+      "This project uses OpenWolf for persistent AI memory. Read these files at the start of every session:",
+      "",
+      "- `.wolf/cerebrum.md` — architectural decisions, patterns, hard-won learnings. **Read this first.**",
+      "- `.wolf/memory.md` — rolling session log; check the last 20 lines for open threads.",
+      "- `.wolf/anatomy.md` — auto-generated file index; check here before reading any project file.",
+      "- `.wolf/buglog.json` — known bugs; check for open entries relevant to your task.",
+      "",
+      "**End of session:** append to `.wolf/memory.md`, update `.wolf/cerebrum.md` for any architectural decisions.",
+      "<!-- openwolf-end -->",
+    ].join("\n"),
     "opencode.json": JSON.stringify({ instructions: [".wolf/cerebrum.md", ".wolf/memory.md", ".wolf/anatomy.md"] }, null, 2),
   };
   return templates[filename] ?? "";

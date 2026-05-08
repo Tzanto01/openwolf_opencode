@@ -1,4 +1,5 @@
-# OpenWolf Agent Rules
+<!-- openwolf-start -->
+## OpenWolf Memory
 
 This project uses OpenWolf for persistent AI memory. Read these files at the start of every session:
 
@@ -7,7 +8,7 @@ This project uses OpenWolf for persistent AI memory. Read these files at the sta
 - `.wolf/anatomy.md` — auto-generated file index; check here before reading any project file.
 - `.wolf/buglog.json` — known bugs; check for open entries relevant to your task.
 
-## Session Protocol
+### Session Protocol
 
 **Start of session:**
 1. Read `.wolf/cerebrum.md` fully.
@@ -26,3 +27,4 @@ This project uses OpenWolf for persistent AI memory. Read these files at the sta
 - Low threshold for logging to cerebrum — when in doubt, add it.
 
 Do not modify `.wolf/` files mid-task unless explicitly asked.
+<!-- openwolf-end -->
