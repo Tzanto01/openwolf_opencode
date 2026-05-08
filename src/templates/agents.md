@@ -1,30 +1,33 @@
 <!-- openwolf-start -->
-## OpenWolf Memory
+## OpenWolf Protocol
 
-This project uses OpenWolf for persistent AI memory. Read these files at the start of every session:
+### Session Start
 
-- `.wolf/cerebrum.md` — architectural decisions, patterns, hard-won learnings. **Read this first.**
-- `.wolf/memory.md` — rolling session log; check the last 20 lines for open threads.
-- `.wolf/anatomy.md` — auto-generated file index; check here before reading any project file.
-- `.wolf/buglog.json` — known bugs; check for open entries relevant to your task.
+Before writing any code or answering any technical question, read the following files in order:
 
-### Session Protocol
+1. `.wolf/OPENWOLF.md` — operating protocol and rules
+2. `.wolf/cerebrum.md` — learnings, do-not-repeats, decisions
+3. `.wolf/memory.md` — chronological action log from previous sessions
+4. `.wolf/buglog.json` — open bugs relevant to the current task
 
-**Start of session:**
-1. Read `.wolf/cerebrum.md` fully.
-2. Read the last 20 lines of `.wolf/memory.md`.
-3. Check `.wolf/buglog.json` for OPEN bugs relevant to your task.
-4. Check `.wolf/anatomy.md` before opening any file — if the description is sufficient, skip the full read.
+Do not skip this step. These files are the ground truth for session context.
 
-**End of session:**
-1. Append a session entry to `.wolf/memory.md` (what you did, what's open).
-2. Update `.wolf/cerebrum.md` if you made any architectural decisions or discovered new conventions.
-3. Update `.wolf/buglog.json` if you fixed or discovered bugs.
+### Every Turn
 
-**During session:**
-- Never re-read a file already read this session.
-- When you receive a correction, update `.wolf/cerebrum.md` immediately.
-- Low threshold for logging to cerebrum — when in doubt, add it.
+At the end of every turn in which you changed a file, ran a command, fixed a bug, or learned something new, update the wolf files before yielding back to the user:
 
-Do not modify `.wolf/` files mid-task unless explicitly asked.
+- `.wolf/memory.md` — append a dated entry describing what was done
+- `.wolf/cerebrum.md` — add any new learnings, do-not-repeats, or decisions
+- `.wolf/buglog.json` — add or close bug entries as appropriate
+- `.wolf/anatomy.md` — update descriptions for any files you read or changed
+
+Do not wait to be reminded. If you finish a task without updating the wolf files, your turn is not complete.
+
+### Before Fixing Any Bug
+
+Read `.wolf/buglog.json` first. The fix may already be documented.
+
+### Before Reading Any File
+
+Check `.wolf/anatomy.md` first. If the description is sufficient, skip the full read.
 <!-- openwolf-end -->
