@@ -24,6 +24,7 @@ import { execSync } from "node:child_process";
 import { findProjectRoot } from "../scanner/project-root.js";
 import { readJSON, writeJSON, readText, writeText, appendText } from "../utils/fs-safe.js";
 import { ensureDir } from "../utils/paths.js";
+import { assignProjectPorts, projectPorts } from "../utils/ports.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -246,6 +247,11 @@ export async function migrateCommand(): Promise<void> {
   if (updatedProtocol > 0) {
     console.log(`  ✓ Updated ${updatedProtocol} wolf protocol files (OPENWOLF.md, config.json)`);
   }
+
+  // ── 8. Assign project-specific ports ─────────────────────────────────
+  assignProjectPorts(wolfDir, projectRoot);
+  const ports = projectPorts(projectRoot);
+  console.log(`  ✓ Assigned project-specific ports (daemon: ${ports.daemon}, dashboard: ${ports.dashboard})`);
 
   // ── Summary ──────────────────────────────────────────────────────────
   console.log("");

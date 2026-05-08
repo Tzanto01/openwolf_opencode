@@ -8,6 +8,7 @@ import { readJSON, writeJSON, readText, writeText, appendText } from "../utils/f
 import { ensureDir } from "../utils/paths.js";
 import { isWindows } from "../utils/platform.js";
 import { registerProject } from "./registry.js";
+import { assignProjectPorts } from "../utils/ports.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,6 +90,11 @@ export async function initCommand(): Promise<void> {
       createdCount++;
     }
   }
+
+  // Assign project-specific daemon/dashboard ports (deterministic hash of project root).
+  // This overwrites the template defaults (18790/18791) so concurrent projects don't
+  // collide on the same port.
+  assignProjectPorts(wolfDir, projectRoot);
 
   // --- Cerebrum: seed project info only if fresh ---
   if (!isUpgrade) {
