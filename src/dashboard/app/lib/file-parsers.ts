@@ -56,11 +56,22 @@ export function parseMemory(content: string): MemorySession[] {
   const sessions: MemorySession[] = [];
   let current: MemorySession | null = null;
 
-  for (const line of content.split("\n")) {
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
     const sessionMatch = line.match(/^## Session: (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/);
     if (sessionMatch) {
       if (current) sessions.push(current);
       current = { date: sessionMatch[1], time: sessionMatch[2], entries: [] };
+      continue;
+    }
+
+    // Current OpenWolf memory format:
+    // ## YYYY-MM-DD
+    // - free-form entry text
+    const dateHeaderMatch = line.match(/^## (\d{4}-\d{2}-\d{2})$/);
+    if (dateHeaderMatch) {
+      if (current) sessions.push(current);
+      current = { date: dateHeaderMatch[1], time: "", entries: [] };
       continue;
     }
 
@@ -73,6 +84,20 @@ export function parseMemory(content: string): MemorySession[] {
           files: parts[2],
           outcome: parts[3],
           tokens: parts[4] || "",
+        });
+      }
+      continue;
+    }
+
+    if (current) {
+      const bulletMatch = line.match(/^[-*]\s+(.+)/);
+      if (bulletMatch) {
+        current.entries.push({
+          time: "",
+          action: bulletMatch[1].trim(),
+          files: "",
+          outcome: "",
+          tokens: "",
         });
       }
     }
