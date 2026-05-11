@@ -55,6 +55,7 @@ export function parseAnatomy(content: string): { entries: AnatomyEntry[]; metada
 export function parseMemory(content: string): MemorySession[] {
   const sessions: MemorySession[] = [];
   let current: MemorySession | null = null;
+  const dateCellPattern = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?$/;
 
   for (const rawLine of content.split("\n")) {
     const line = rawLine.replace(/\r$/, "");
@@ -68,16 +69,42 @@ export function parseMemory(content: string): MemorySession[] {
     // Current OpenWolf memory format:
     // ## YYYY-MM-DD
     // - free-form entry text
-    const dateHeaderMatch = line.match(/^## (\d{4}-\d{2}-\d{2})$/);
+    const dateHeaderMatch = line.match(/^## (\d{4}-\d{2}-\d{2})\s*$/);
     if (dateHeaderMatch) {
       if (current) sessions.push(current);
       current = { date: dateHeaderMatch[1], time: "", entries: [] };
       continue;
     }
 
-    if (current && line.startsWith("|") && !line.startsWith("|--") && !line.startsWith("| Time")) {
-      const parts = line.split("|").map(s => s.trim()).filter(Boolean);
-      if (parts.length >= 4) {
+    const isSeparator = /^\|\s*:?-{3,}/.test(line);
+    const isHeaderRow = /^\|\s*(date|time)\b/i.test(line);
+    if (line.startsWith("|") && !isSeparator && !isHeaderRow) {
+      const inner = line.replace(/^\|/, "").replace(/\|\s*$/, "");
+      const parts = inner.split("|").map(s => s.trim());
+      const dateCellMatch = parts[0]?.match(dateCellPattern);
+
+      // Compressed milestone format:
+      // | 2026-05-11 [HH:MM] | Action | Files | Result | Tokens |
+      if (dateCellMatch && parts.length >= 4) {
+        const nextDate = dateCellMatch[1];
+        const nextTime = dateCellMatch[2] || "";
+
+        if (!current || current.date !== nextDate || current.time !== nextTime) {
+          if (current) sessions.push(current);
+          current = { date: nextDate, time: nextTime, entries: [] };
+        }
+
+        current.entries.push({
+          time: nextTime,
+          action: parts[1],
+          files: parts[2],
+          outcome: parts[3],
+          tokens: parts[4] || "",
+        });
+        continue;
+      }
+
+      if (current && parts.length >= 4) {
         current.entries.push({
           time: parts[0],
           action: parts[1],
