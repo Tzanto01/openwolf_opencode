@@ -1,6 +1,6 @@
 {
   "name": "openwolf-opencode",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Persistent AI memory and project context for OpenCode and any AI coding agent",
   "type": "module",
   "bin": {

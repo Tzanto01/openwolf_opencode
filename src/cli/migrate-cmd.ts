@@ -30,8 +30,8 @@ import {
   uninstallOldOpenwolf,
   WOLF_GITIGNORE_BLOCK,
   WOLF_GITIGNORE_SENTINEL,
-  WOLF_AGENTS_SENTINEL,
 } from "../utils/detect.js";
+import { reconcileAgentsContent } from "../utils/agents-injector.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -217,10 +217,15 @@ export async function migrateCommand(): Promise<void> {
     console.log("  ✓ Created AGENTS.md");
   } else {
     const existing = readText(agentsMdPath);
-    if (!existing.includes(WOLF_AGENTS_SENTINEL)) {
-      const section = readTemplateContent("agents.md", templatesDir);
-      appendText(agentsMdPath, `\n${section}\n`);
+    const section = readTemplateContent("agents.md", templatesDir);
+    const result = reconcileAgentsContent(existing, section);
+    if (result.action === "append") {
+      writeText(agentsMdPath, result.content);
       console.log("  ✓ Appended OpenWolf section to existing AGENTS.md");
+    } else if (result.action === "skip-opt-out") {
+      console.log("  ○ AGENTS.md opted out of OpenWolf injection — not modified");
+    } else if (result.action === "skip-openwolf-pointer") {
+      console.log("  ○ AGENTS.md already points to .wolf/OPENWOLF.md — not modified");
     } else {
       console.log("  ○ AGENTS.md already contains wolf section — not modified");
     }

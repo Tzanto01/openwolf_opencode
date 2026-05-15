@@ -42,11 +42,20 @@ function shouldExclude(relPath, excludePatterns) {
     if (basename.startsWith(".env.") || basename === ".env")
         return true;
     for (const pattern of excludePatterns) {
-        // Simple glob: check if any path segment matches
-        if (pattern.startsWith("*.")) {
-            const ext = pattern.slice(1);
-            if (relPath.endsWith(ext))
+        if (pattern.includes("*") && !pattern.includes("/")) {
+            const wildcard = pattern
+                .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+                .replace(/\*/g, ".*");
+            if (new RegExp(`^${wildcard}$`).test(basename))
                 return true;
+        }
+        else if (pattern.includes("/")) {
+            const normalizedPattern = normalizePath(pattern).replace(/^\.\//, "").replace(/\/$/, "");
+            if (relPath === normalizedPattern ||
+                relPath.startsWith(`${normalizedPattern}/`) ||
+                relPath.includes(`/${normalizedPattern}/`)) {
+                return true;
+            }
         }
         else {
             if (parts.includes(pattern))
@@ -121,7 +130,7 @@ export function serializeAnatomy(sections, metadata) {
         "# anatomy.md",
         "",
         `> Auto-maintained by OpenWolf. Last scanned: ${metadata.lastScanned}`,
-        `> Files: ${metadata.fileCount} tracked | Anatomy hits: ${metadata.hits} | Misses: ${metadata.misses}`,
+        `> Files: ${metadata.fileCount} tracked`,
         "",
     ];
     const sortedKeys = [...sections.keys()].sort();
@@ -174,7 +183,7 @@ export function buildAnatomy(wolfDir, projectRoot) {
             anatomy: {
                 max_description_length: 100,
                 max_files: 500,
-                exclude_patterns: ["node_modules", ".git", "dist", "build", ".wolf"],
+                exclude_patterns: ["node_modules", ".git", "dist", "build", ".wolf", "bin", "obj", "packages", "runtimes", ".vs/CopilotSnapshots", ".swarm/evidence", ".wolf/backups", ".copilot-cron-prompt-*.md"],
             },
             token_audit: { chars_per_token_code: 3.5, chars_per_token_prose: 4.0 },
         },
@@ -187,8 +196,6 @@ export function buildAnatomy(wolfDir, projectRoot) {
     const serialized = serializeAnatomy(entries, {
         lastScanned: new Date().toISOString(),
         fileCount,
-        hits: 0,
-        misses: 0,
     });
     return { content: serialized, fileCount };
 }
@@ -252,8 +259,6 @@ export function updateAnatomyEntry(wolfDir, filePath, projectRoot, action) {
     const serialized = serializeAnatomy(sections, {
         lastScanned: new Date().toISOString(),
         fileCount,
-        hits: 0,
-        misses: 0,
     });
     writeText(anatomyPath, serialized);
 }

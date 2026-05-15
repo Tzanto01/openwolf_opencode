@@ -15,8 +15,8 @@ import {
   uninstallOldOpenwolf,
   WOLF_GITIGNORE_BLOCK,
   WOLF_GITIGNORE_SENTINEL,
-  WOLF_AGENTS_SENTINEL,
 } from "../utils/detect.js";
+import { reconcileAgentsContent } from "../utils/agents-injector.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -160,9 +160,14 @@ export async function initCommand(): Promise<void> {
     console.log("  ✓ Created AGENTS.md");
   } else {
     const existing = readText(agentsMdPath);
-    if (!existing.includes(WOLF_AGENTS_SENTINEL)) {
-      appendText(agentsMdPath, `\n${agentsSection}\n`);
+    const result = reconcileAgentsContent(existing, agentsSection);
+    if (result.action === "append") {
+      writeText(agentsMdPath, result.content);
       console.log("  ✓ Appended OpenWolf section to existing AGENTS.md");
+    } else if (result.action === "skip-opt-out") {
+      console.log("  ○ AGENTS.md opted out of OpenWolf injection — not modified");
+    } else if (result.action === "skip-openwolf-pointer") {
+      console.log("  ○ AGENTS.md already points to .wolf/OPENWOLF.md — not modified");
     }
     // else: wolf section already present — leave the file untouched
   }
@@ -364,7 +369,7 @@ function generateTemplate(destPath: string, file: string): void {
       version: 1,
       openwolf: {
         enabled: true,
-        anatomy: { auto_scan_on_init: true, rescan_interval_hours: 6, max_description_length: 100, max_files: 500, exclude_patterns: ["node_modules", ".git", "dist", "build", ".wolf", ".next", ".nuxt", "coverage", "__pycache__", ".cache", "target", ".vscode", ".idea", ".turbo", ".vercel", ".netlify", ".output", "*.min.js", "*.min.css"] },
+        anatomy: { auto_scan_on_init: true, rescan_interval_hours: 6, max_description_length: 100, max_files: 500, exclude_patterns: ["node_modules", ".git", "dist", "build", ".wolf", ".next", ".nuxt", "coverage", "__pycache__", ".cache", "target", ".vscode", ".idea", ".turbo", ".vercel", ".netlify", ".output", "bin", "obj", "packages", "runtimes", ".vs/CopilotSnapshots", ".swarm/evidence", ".wolf/backups", ".copilot-cron-prompt-*.md", "*.min.js", "*.min.css"] },
         token_audit: { enabled: true, report_frequency: "weekly", waste_threshold_percent: 15, chars_per_token_code: 3.5, chars_per_token_prose: 4.0 },
         cron: { enabled: true, max_retry_attempts: 3, dead_letter_enabled: true, heartbeat_interval_minutes: 30, providers: [{ type: "openai_api", priority: 1 }, { type: "anthropic_api", priority: 2 }, { type: "openrouter_api", priority: 3 }], fallback_on_rate_limit: true },
         memory: { consolidation_after_days: 7, max_entries_before_consolidation: 200 },

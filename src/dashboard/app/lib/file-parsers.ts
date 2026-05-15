@@ -25,11 +25,16 @@ export function parseAnatomy(content: string): { entries: AnatomyEntry[]; metada
   let files = 0, hits = 0, misses = 0;
 
   for (const line of content.split("\n")) {
-    const metaMatch = line.match(/Files:\s*(\d+).*hits:\s*(\d+).*Misses:\s*(\d+)/i);
-    if (metaMatch) {
-      files = parseInt(metaMatch[1]);
-      hits = parseInt(metaMatch[2]);
-      misses = parseInt(metaMatch[3]);
+    const legacyMetaMatch = line.match(/Files:\s*(\d+).*hits:\s*(\d+).*Misses:\s*(\d+)/i);
+    if (legacyMetaMatch) {
+      files = parseInt(legacyMetaMatch[1]);
+      hits = parseInt(legacyMetaMatch[2]);
+      misses = parseInt(legacyMetaMatch[3]);
+    } else {
+      const filesMatch = line.match(/Files:\s*(\d+)/i);
+      if (filesMatch) {
+        files = parseInt(filesMatch[1]);
+      }
     }
 
     const sectionMatch = line.match(/^## (.+)/);

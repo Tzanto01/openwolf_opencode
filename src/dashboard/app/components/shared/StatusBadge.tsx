@@ -14,6 +14,8 @@ const variants: Record<string, string> = {
   failed: "bg-red-500/20 text-red-400 border-red-500/30",
   stopped: "bg-red-500/20 text-red-400 border-red-500/30",
   disabled: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+  open: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  resolved: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
   unknown: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
   initialized: "bg-blue-500/20 text-blue-400 border-blue-500/30",
 };

@@ -76,3 +76,6 @@ export const WOLF_GITIGNORE_SENTINEL = "# OpenWolf — runtime & generated files
  * wolf simply adds its own clearly-delimited block without clobbering existing content.
  */
 export const WOLF_AGENTS_SENTINEL = "<!-- openwolf-start -->";
+
+/** Opt-out marker: AGENTS.md already points to the canonical OpenWolf protocol. */
+export const WOLF_AGENTS_SKIP_MARKER = "<!-- openwolf-skip-injection -->";

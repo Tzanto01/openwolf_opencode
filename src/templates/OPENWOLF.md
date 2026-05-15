@@ -8,6 +8,8 @@ You are working in an OpenWolf-managed project. These rules apply every turn.
 2. If the description in anatomy.md is sufficient for your task, do NOT read the full file.
 3. If a file is not in anatomy.md, search with Grep/Glob, then update anatomy.md with the new entry.
 
+OpenWolf uses plain file pointers, not `@filename` includes. If a file points you to `.wolf/OPENWOLF.md`, read it directly.
+
 ## Code Generation
 
 1. Before generating code, read `.wolf/cerebrum.md` and respect every entry.
@@ -17,7 +19,8 @@ You are working in an OpenWolf-managed project. These rules apply every turn.
 ## After Actions
 
 1. After every significant action, append a one-line entry to `.wolf/memory.md`:
-   `| HH:MM | description | file(s) | outcome | ~tokens |`
+   `| YYYY-MM-DD HH:MM | description | file(s) | outcome | ~tokens |`
+   Use local time. The date column is mandatory.
 2. After creating, deleting, or renaming files: update `.wolf/anatomy.md`.
 
 ## Cerebrum Learning (MANDATORY — every session)
@@ -71,6 +74,8 @@ OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cer
 {
   "id": "bug-NNN",
   "timestamp": "ISO date",
+  "status": "open",
+  "resolved_at": null,
   "error_message": "exact error or user complaint",
   "file": "file that was fixed",
   "root_cause": "why it broke",
@@ -81,6 +86,10 @@ OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cer
   "last_seen": "ISO date"
 }
 ```
+
+`status` must be `open` or `resolved`. When resolving a bug, set `resolved_at` to an ISO timestamp.
+
+If a project keeps its own AGENTS instructions and only wants a pointer to the canonical protocol, add `<!-- openwolf-skip-injection -->` to `AGENTS.md` and reference `.wolf/OPENWOLF.md` directly.
 
 **The threshold is LOW.** When in doubt, log it. A false positive in the bug log costs nothing. A missed bug means repeating the same mistake later.
 

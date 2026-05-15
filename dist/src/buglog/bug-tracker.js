@@ -4,7 +4,11 @@ export function getBugLogPath(wolfDir) {
     return path.join(wolfDir, "buglog.json");
 }
 export function readBugLog(wolfDir) {
-    return readJSON(getBugLogPath(wolfDir), { version: 1, bugs: [] });
+    const bugLog = readJSON(getBugLogPath(wolfDir), { version: 1, bugs: [] });
+    return {
+        ...bugLog,
+        bugs: (bugLog.bugs || []).map(normalizeBugEntry),
+    };
 }
 export function logBug(wolfDir, bug) {
     const bugLog = readBugLog(wolfDir);
@@ -16,6 +20,8 @@ export function logBug(wolfDir, bug) {
         if (existing) {
             existing.occurrences++;
             existing.last_seen = now;
+            existing.status = existing.status ?? "open";
+            existing.resolved_at = existing.status === "resolved" ? existing.resolved_at ?? now : null;
             writeJSON(getBugLogPath(wolfDir), bugLog);
             return;
         }
@@ -33,8 +39,21 @@ export function logBug(wolfDir, bug) {
         related_bugs: [],
         occurrences: 1,
         last_seen: now,
+        status: "open",
+        resolved_at: null,
     });
     writeJSON(getBugLogPath(wolfDir), bugLog);
+}
+export function resolveBug(wolfDir, bugId, resolvedAt = new Date().toISOString()) {
+    const bugLog = readBugLog(wolfDir);
+    const bug = bugLog.bugs.find((entry) => entry.id === bugId);
+    if (!bug)
+        return false;
+    bug.status = "resolved";
+    bug.resolved_at = resolvedAt;
+    bug.last_seen = resolvedAt;
+    writeJSON(getBugLogPath(wolfDir), bugLog);
+    return true;
 }
 function normalize(text) {
     return text.toLowerCase().replace(/\d+/g, "N").replace(/[^\w\s]/g, " ").trim();
@@ -77,5 +96,13 @@ export function searchBugs(wolfDir, term) {
         b.fix.toLowerCase().includes(lower) ||
         b.tags.some((t) => t.toLowerCase().includes(lower)) ||
         b.file.toLowerCase().includes(lower));
+}
+function normalizeBugEntry(bug) {
+    const status = bug.status === "resolved" ? "resolved" : "open";
+    return {
+        ...bug,
+        status,
+        resolved_at: status === "resolved" ? bug.resolved_at ?? bug.last_seen : null,
+    };
 }
 //# sourceMappingURL=bug-tracker.js.map

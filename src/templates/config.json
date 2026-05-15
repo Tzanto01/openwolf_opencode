@@ -25,6 +25,14 @@
         ".vercel",
         ".netlify",
         ".output",
+        "bin",
+        "obj",
+        "packages",
+        "runtimes",
+        ".vs/CopilotSnapshots",
+        ".swarm/evidence",
+        ".wolf/backups",
+        ".copilot-cron-prompt-*.md",
         "*.min.js",
         "*.min.css"
       ]

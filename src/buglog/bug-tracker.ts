@@ -1,6 +1,8 @@
 import * as path from "node:path";
 import { readJSON, writeJSON } from "../utils/fs-safe.js";
 
+export type BugStatus = "open" | "resolved";
+
 interface BugEntry {
   id: string;
   timestamp: string;
@@ -13,6 +15,8 @@ interface BugEntry {
   related_bugs: string[];
   occurrences: number;
   last_seen: string;
+  status?: BugStatus;
+  resolved_at?: string | null;
 }
 
 interface BugLog {
@@ -25,7 +29,11 @@ export function getBugLogPath(wolfDir: string): string {
 }
 
 export function readBugLog(wolfDir: string): BugLog {
-  return readJSON<BugLog>(getBugLogPath(wolfDir), { version: 1, bugs: [] });
+  const bugLog = readJSON<BugLog>(getBugLogPath(wolfDir), { version: 1, bugs: [] });
+  return {
+    ...bugLog,
+    bugs: (bugLog.bugs || []).map(normalizeBugEntry),
+  };
 }
 
 export function logBug(
@@ -49,6 +57,8 @@ export function logBug(
     if (existing) {
       existing.occurrences++;
       existing.last_seen = now;
+      existing.status = existing.status ?? "open";
+      existing.resolved_at = existing.status === "resolved" ? existing.resolved_at ?? now : null;
       writeJSON(getBugLogPath(wolfDir), bugLog);
       return;
     }
@@ -67,9 +77,23 @@ export function logBug(
     related_bugs: [],
     occurrences: 1,
     last_seen: now,
+    status: "open",
+    resolved_at: null,
   });
 
   writeJSON(getBugLogPath(wolfDir), bugLog);
+}
+
+export function resolveBug(wolfDir: string, bugId: string, resolvedAt = new Date().toISOString()): boolean {
+  const bugLog = readBugLog(wolfDir);
+  const bug = bugLog.bugs.find((entry) => entry.id === bugId);
+  if (!bug) return false;
+
+  bug.status = "resolved";
+  bug.resolved_at = resolvedAt;
+  bug.last_seen = resolvedAt;
+  writeJSON(getBugLogPath(wolfDir), bugLog);
+  return true;
 }
 
 function normalize(text: string): string {
@@ -132,4 +156,13 @@ export function searchBugs(wolfDir: string, term: string): BugEntry[] {
       b.tags.some((t) => t.toLowerCase().includes(lower)) ||
       b.file.toLowerCase().includes(lower)
   );
+}
+
+function normalizeBugEntry(bug: BugEntry): BugEntry {
+  const status: BugStatus = bug.status === "resolved" ? "resolved" : "open";
+  return {
+    ...bug,
+    status,
+    resolved_at: status === "resolved" ? bug.resolved_at ?? bug.last_seen : null,
+  };
 }
